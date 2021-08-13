@@ -1,0 +1,22 @@
+{
+  "name": "mu-tunnel",
+  "version": "0.0.0",
+  "description": "Microservice to securely send messages between different semantic.works stacks.",
+  "type": "module",
+  "dependencies": {
+    "@lblod/mu-auth-sudo": "^0.2.0",
+    "fs-extra": "^8.0.1",
+    "openpgp": "^5.0.0-0",
+    "request": "^2"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/redpencilio/poc-diff-producer-service.git"
+  },
+  "author": "redpencil.io",
+  "license": "MIT"
+}
