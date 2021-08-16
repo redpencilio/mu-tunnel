@@ -95,28 +95,23 @@ ${JSON.stringify(payload, undefined, 2)}`);
   headers['mu-tunnel-identity'] = peer.identity;
 
   // Forward the request and construct a response object.
-  let resobj = await new Promise((resolve, reject) => {
-    http.request(payload.url,
-                 { headers: headers,
-                   method: payload.method },
-                 (forwardres) => resolve(forwardres) )
-        .on('error', (err) => reject(err))
-        .write(Buffer.from(payload.body, 'base64'))
-        .end();})
-      .then(forwardres =>
-        new Promise( (resolve, reject) => {
-          let chunks = [];
-          forwardres.on('data', chunk => chunks.push(chunk));
-          forwardres.on('end', () => resolve({
-            headers: forwardres.headers,
-            status: forwarders.statusCode,
-            body: Buffer.concat(chunks).toString('base64')}));
-          forwardres.on('error', err => reject(err));}))
-      .catch(err => {
-        console.error(`Error while forwarding request: ${err}`);
-        res.status(502);
-        throw err;
-      });
+  let resobj;
+  try {
+    let forwardres = await http(payload.url, headers, payload.method, Buffer.from(payload.body, 'base64'));
+    resobj = await new Promise((resolve, reject) => {
+      let chunks = [];
+      forwardres.on('data', chunk => chunks.push(chunk));
+      forwardres.on('end', () => resolve({
+        headers: forwardres.headers,
+        status: forwarders.statusCode,
+        body: Buffer.concat(chunks).toString('base64')}));
+      forwardres.on('error', err => reject(err));
+    });
+  } catch(err) {
+    console.error(`Error while forwarding request: ${err}`);
+    res.status(502);
+    throw err;
+  }
 
   // Encrypt the response object
   const encrypted = await pgp.encrypt({
@@ -167,14 +162,7 @@ ${JSON.stringify(payload, undefined, 2)}`);
   // Send the encrypted message and read the response
   let message;
   try {
-    let peerres = await new Promise((resolve, reject) => {
-      http.request(peer.address,
-                   { headers: { 'Content-Type' : 'text/plain' },
-                     method: 'POST' },
-                   (forwardres) => resolve(forwardres) )
-          .on('error', (err) => reject(err))
-          .write(encrypted)
-          .end();})
+    let peerres = await http(peer.address, { 'Content-Type' : 'text/plain' }, 'POST', encrypted);
     message = await new Promise((resolve, reject) => {
       let acc = "";
       peerres.on('data', chunk => acc.append(chunk));
@@ -217,6 +205,19 @@ ${JSON.stringify(payload, undefined, 2)}`);
   res.send(Buffer.from(payload.body, 'base64'));
   console.log(`Succesfully handled request to ${peer.identity}`);
 });
+
+// Wrap http.request in a promise
+function http(addr, headers, method, message) {
+  return new Promise((resolve, reject) => {
+      http.request(addr,
+                   { headers: headers,
+                     method: method },
+                   forwardres => resolve(forwardres) )
+          .on('error', err => reject(err))
+          .write(message)
+          .end();
+  });
+}
 
 async function loadKeys() {
   try {
