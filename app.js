@@ -13,7 +13,12 @@ const config = require('/config/config.js');
 console.log(process.version);
 console.log(config);
 
+// Load PGP keys
 loadKeys();
+
+// Enable compression
+pgp.config.compressionLevel = 9;
+pgp.config.preferredCompressionAlgorithm = pgp.enums.compression.zlib;
 
 app.use( bodyParser.json( { type: function(req) { return /^application\/json/.test( req.get('content-type') ); } } ) );
 
