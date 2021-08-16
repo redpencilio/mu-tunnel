@@ -17,12 +17,15 @@ console.log(config);
 loadKeys();
 
 // Enable compression
-pgp.config.compressionLevel = 9;
+pgp.config.compressionLevel = process.env.PGP_COMPRESSION_LEVEL || 9;
 pgp.config.preferredCompressionAlgorithm = pgp.enums.compression.zlib;
 
-app.use( bodyParser.json( { type: function(req) { return /^application\/json/.test( req.get('content-type') ); } } ) );
+app.use(bodyParser.json({ type: "application/json" }));
+app.use(bodyParser.text({ type: "text/plain" }));
+app.use(bodyParser.raw({ type: "application/octet-stream" }));
 
-app.post('/secure', (req, res) => {
+// Endpoint for INBOUND messages, e.g. another tunnel service relaying a remote message
+app.post('/secure', async (req, res) => {
   // TODO: ensure HTTPS is used
 
   // Read the PGP message
@@ -89,21 +92,24 @@ ${JSON.stringify(payload, undefined, 2)}`);
   // TODO: ACCESS CONTROL
 
   // Set some headers
-  let headers = payload.headers;
+  let headers = payload.headers || {};
   headers['mu-call-id'] = uuid();
-  headers['mu-call-id-trail'] = [...(payload.headers['mu-call-id-trail'] || []), payload.headers['mu-call-id']];
+  if(payload.headers && payload.headers['mu-call-id']) {
+    headers['mu-call-id-trail'] = [...(payload.headers['mu-call-id-trail'] || []), payload.headers['mu-call-id']];
+  }
   headers['mu-tunnel-identity'] = peer.identity;
 
   // Forward the request and construct a response object.
   let resobj;
   try {
-    let forwardres = await http(payload.url, headers, payload.method, Buffer.from(payload.body, 'base64'));
+    let body = payload.body ? Buffer.from(payload.body, 'base64') : undefined;
+    let forwardres = await httpPromise(payload.url, headers, payload.method, body);
     resobj = await new Promise((resolve, reject) => {
       let chunks = [];
       forwardres.on('data', chunk => chunks.push(chunk));
       forwardres.on('end', () => resolve({
         headers: forwardres.headers,
-        status: forwarders.statusCode,
+        status: forwardres.statusCode,
         body: Buffer.concat(chunks).toString('base64')}));
       forwardres.on('error', err => reject(err));
     });
@@ -128,10 +134,11 @@ ${JSON.stringify(payload, undefined, 2)}`);
   console.log(`Succesfully responded to message from ${peer.identity}.`);
 });
 
-app.post('/out', (req, res) => {
+// Endpoint for OUTBOUND messages, e.g. internal services that want to contact another stack.
+app.post('/out', async (req, res) => {
   if(process.env.TUNNEL_LOG_OUTBOUND) {
     console.log(`Received message:
-${JSON.stringify(payload, undefined, 2)}`);
+${JSON.stringify(req.body, undefined, 2)}`);
   } else {
     console.log(`Received message.`);
   }
@@ -162,15 +169,15 @@ ${JSON.stringify(payload, undefined, 2)}`);
   // Send the encrypted message and read the response
   let message;
   try {
-    let peerres = await http(peer.address, { 'Content-Type' : 'text/plain' }, 'POST', encrypted);
+    let peerres = await httpPromise(peer.address, { 'Content-Type' : 'text/plain' }, 'POST', encrypted);
     message = await new Promise((resolve, reject) => {
       let acc = "";
-      peerres.on('data', chunk => acc.append(chunk));
+      peerres.on('data', chunk => acc = acc.concat(chunk));
       peerres.on('end', () => resolve(acc));
       peerres.on('error', err => reject(err));
     });
   } catch(err) {
-    console.error(`Error while forwarding request ${err}`);
+    console.error(`Error while forwarding request: ${err}`);
     res.status(502).send("Forwarding failed.");
     return;
   }
@@ -178,12 +185,12 @@ ${JSON.stringify(payload, undefined, 2)}`);
   // Decrypt the PGP response
   let payloadstring;
   try {
-    const {data: payloadstring} = await pgp.decrypt({
-      message,
+    ({data: payloadstring} = await pgp.decrypt({
+      message: await pgp.readMessage({armoredMessage: message}),
       verificationKeys: peer.key, // We know the peer, so we know which key to expect.
       decryptionKeys: config.self.key,
       expectSigned: true
-    });
+    }));
   } catch(err) {
     console.error(`Failed to decrypt response: ${err}`);
     res.status(502).send("Failed to decrypt.");
@@ -191,8 +198,9 @@ ${JSON.stringify(payload, undefined, 2)}`);
   }
 
   // Parse the response
+  let payload;
   try {
-    let payload = JSON.parse(payloadstring);
+    payload = JSON.parse(payloadstring);
   } catch(err) {
     console.error(`Failed to parse payload: ${err}`);
     console.error(payload);
@@ -207,15 +215,17 @@ ${JSON.stringify(payload, undefined, 2)}`);
 });
 
 // Wrap http.request in a promise
-function http(addr, headers, method, message) {
+function httpPromise(addr, headers, method, body) {
   return new Promise((resolve, reject) => {
-      http.request(addr,
-                   { headers: headers,
-                     method: method },
-                   forwardres => resolve(forwardres) )
-          .on('error', err => reject(err))
-          .write(message)
-          .end();
+    let req = http.request(addr,
+                           { headers: headers,
+                             method: method },
+                           forwardres => resolve(forwardres) )
+    req.on('error', err => reject(err))
+    if(body) {
+      req.write(body)
+    }
+    req.end();
   });
 }
 
