@@ -18,9 +18,10 @@ loadKeys();
 app.use( bodyParser.json( { type: function(req) { return /^application\/json/.test( req.get('content-type') ); } } ) );
 
 app.post('/secure', (req, res) => {
-  let message;
+  // TODO: ensure HTTPS is used
 
   // Read the PGP message
+  let message;
   try {
     if(req.get('Content-Type') === "text/plain") {
       message = await pgp.readMessage({armoredMessage: req.body});
@@ -31,13 +32,13 @@ app.post('/secure', (req, res) => {
     }
   } catch(err) {
     res.status(400).send("Bad PGP message.");
-    console.log("Bad PGP message.");
-    console.log(err);
+    console.error("Bad PGP message.");
+    console.error(err);
     return;
   }
 
   // Decrypt the PGP message
-  const {data: payloadstring, signatures } = await pgp.decrypt({
+  const {data: payloadstring, signatures} = await pgp.decrypt({
     message,
     verificationKeys: config.peers.map(peer => peer.key),
     decryptionKeys: config.self.key
@@ -52,8 +53,8 @@ app.post('/secure', (req, res) => {
       throw `Could not verify signature by key ${signatures[0].keyID}`;
     }
   } catch(err) {
-    console.log("Unable to verify signature.");
-    console.log(err);
+    console.error("Unable to verify signature.");
+    console.error(err);
     res.status(401).send("Cannot verify key.");
     return;
   }
@@ -66,16 +67,18 @@ app.post('/secure', (req, res) => {
   try {
     payload = JSON.parse(payloadstring);
   } catch(err) {
-    console.log(`Could not parse decrypted payload:
+    console.error(`Could not parse decrypted payload:
   ${payloadstring}`);
-    console.log(err);
+    console.error(err);
     res.status(400).send("Unparseable plaintext.");
     return;
   }
 
   if(process.env.TUNNEL_LOG_INBOUND) {
     console.log(`Received message from ${peer.identity}:
-  ${JSON.stringify(payload, undefined, 2)}`);
+${JSON.stringify(payload, undefined, 2)}`);
+  } else {
+    console.log(`Received message from ${peer.identity}.`);
   }
 
   // TODO: ACCESS CONTROL
@@ -87,7 +90,6 @@ app.post('/secure', (req, res) => {
   headers['mu-tunnel-identity'] = peer.identity;
 
   // Forward the request and construct a response object.
-  let chunks = [];
   let resobj = await new Promise((resolve, reject) => {
     http.request(payload.url,
                  { headers: headers,
@@ -98,6 +100,7 @@ app.post('/secure', (req, res) => {
         .end();})
       .then(forwardres =>
         new Promise( (resolve, reject) => {
+          let chunks = [];
           forwardres.on('data', chunk => chunks.push(chunk));
           forwardres.on('end', () => resolve({
             headers: forwardres.headers,
@@ -105,7 +108,7 @@ app.post('/secure', (req, res) => {
             body: Buffer.concat(chunks).toString('base64')}));
           forwardres.on('error', err => reject(err));}))
       .catch(err => {
-        console.log(`Error while forwarding request: ${err}`);
+        console.error(`Error while forwarding request: ${err}`);
         res.status(502);
         throw err;
       });
@@ -122,11 +125,93 @@ app.post('/secure', (req, res) => {
   res.set('Content-Type', 'text/plain')
      .status(200)
      .send(encrypted);
+  console.log(`Succesfully responded to message from ${peer.identity}.`);
 });
 
 app.post('/out', (req, res) => {
+  if(process.env.TUNNEL_LOG_OUTBOUND) {
+    console.log(`Received message:
+${JSON.stringify(payload, undefined, 2)}`);
+  } else {
+    console.log(`Received message.`);
+  }
 
-})
+  // Identify the peer, e.g. the public key and address we have to use.
+  const peer = config.peers.find(p => p.identity === req.body.peer);
+  if(!peer) {
+    console.error(`Received request for unknown peer ${peer.identity}`);
+    res.status(400).send("Unknown peer");
+    return;
+  }
+
+  // Encrypt the message
+  let encrypted;
+  try {
+    encrypted = await pgp.encrypt({
+      message: await pgp.createMessage({ text: JSON.stringify(req.body) }),
+      encryptionKeys: peer.key,
+      signingKeys: config.self.key,
+      format: 'armored'
+    });
+  } catch(err) {
+    console.error(`Could not encrypt message: ${err}`);
+    res.status(500).send("Failed to encrypt.");
+    return;
+  }
+
+  // Send the encrypted message and read the response
+  let message;
+  try {
+    let peerres = await new Promise((resolve, reject) => {
+      http.request(peer.address,
+                   { headers: { 'Content-Type' : 'text/plain' },
+                     method: 'POST' },
+                   (forwardres) => resolve(forwardres) )
+          .on('error', (err) => reject(err))
+          .write(encrypted)
+          .end();})
+    message = await new Promise((resolve, reject) => {
+      let acc = "";
+      peerres.on('data', chunk => acc.append(chunk));
+      peerres.on('end', () => resolve(acc));
+      peerres.on('error', err => reject(err));
+    });
+  } catch(err) {
+    console.error(`Error while forwarding request ${err}`);
+    res.status(502).send("Forwarding failed.");
+    return;
+  }
+
+  // Decrypt the PGP response
+  let payloadstring;
+  try {
+    const {data: payloadstring} = await pgp.decrypt({
+      message,
+      verificationKeys: peer.key, // We know the peer, so we know which key to expect.
+      decryptionKeys: config.self.key,
+      expectSigned: true
+    });
+  } catch(err) {
+    console.error(`Failed to decrypt response: ${err}`);
+    res.status(502).send("Failed to decrypt.");
+    return;
+  }
+
+  // Parse the response
+  try {
+    let payload = JSON.parse(payloadstring);
+  } catch(err) {
+    console.error(`Failed to parse payload: ${err}`);
+    console.error(payload);
+    res.status(502).send("Unparseable payload.");
+  }
+
+  // Forward the response to the requester.
+  Object.keys(payload.headers).forEach(h => res.set(h, payload.headers[h]));
+  res.status(payload.status);
+  res.send(Buffer.from(payload.body, 'base64'));
+  console.log(`Succesfully handled request to ${peer.identity}`);
+});
 
 async function loadKeys() {
   try {
