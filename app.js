@@ -153,8 +153,14 @@ ${JSON.stringify(req.body, undefined, 2)}`);
   // Identify the peer, e.g. the public key and address we have to use.
   const peer = config.peers.find(p => p.identity === req.body.peer);
   if(!peer) {
-    console.error(`Received request for unknown peer ${peer.identity}`);
-    res.status(400).send("Unknown peer");
+    console.error(`Received request for unknown peer ${peer.identity}.`);
+    res.status(400).send("Unknown peer.");
+    return;
+  }
+
+  if(!peer.address) {
+    console.error(`No address for peer ${peer.identity}.`);
+    res.status(400).send("No peer address.");
     return;
   }
 
@@ -218,7 +224,7 @@ ${JSON.stringify(req.body, undefined, 2)}`);
   Object.keys(payload.headers).forEach(h => res.set(h, payload.headers[h]));
   res.status(payload.status);
   res.send(Buffer.from(payload.body, 'base64'));
-  console.log(`Succesfully handled request to ${peer.identity}`);
+  console.log(`Succesfully handled request to ${peer.identity}.`);
 });
 
 // Wrap http.request in a promise

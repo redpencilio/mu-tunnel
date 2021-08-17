@@ -43,7 +43,7 @@ This object has the following properties:
 - ~peers~: An array of peer objects:
   + ~identity~: The identity of this peer and its public key.
   + ~file~: The file storing this peer's public key.
-  + ~address~: The external endpoint where this peer can be reached to forward requests.
+  + ~address~ (optional): The external endpoint where this peer can be reached to forward requests. If not present, this tunnel cannot initiate messages to this peer, only receive them.
   + ~allowed~ (optional): An array of strings indicating the path prefixes this peer is allowed to request. If not present, all incoming requests are rejected.
 
 An example configuration file:
@@ -57,7 +57,6 @@ module.exports = {
   peers: [
     { identity: "consumer1@redpencil.io",
       file: "consumer1.asc",
-      address: "http://tunnel-consumer1/secure",
       allowed: ["http://identifier/sync/files", "http://identifier/files/"]
     },
     { identity: "consumer2@redpencil.io",
