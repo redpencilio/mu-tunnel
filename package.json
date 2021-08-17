@@ -15,7 +15,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/redpencilio/poc-diff-producer-service.git"
+    "url": "git+https://github.com/redpencilio/mu-tunnel.git"
   },
   "author": "redpencil.io",
   "license": "MIT"
