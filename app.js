@@ -26,8 +26,6 @@ app.use(bodyParser.raw({ type: "application/octet-stream" }));
 
 // Endpoint for INBOUND messages, e.g. another tunnel service relaying a remote message
 app.post('/secure', async (req, res) => {
-  // TODO: ensure HTTPS is used
-
   // Read the PGP message
   let message;
   try {
@@ -89,7 +87,16 @@ ${JSON.stringify(payload, undefined, 2)}`);
     console.log(`Received message from ${peer.identity}.`);
   }
 
-  // TODO: ACCESS CONTROL
+  // Check if the request URL matches any of the allowed path prefixes.
+  if(!peer.allowed || peer.allowed.find(prefix => payload.url.startsWith(prefix)) === undefined) {
+    if(peer.allowed && peer.allowed.length > 0) {
+      console.error(`Received request for path ${payload.url} not in allowlist ${peer.allowed.toString()} of ${peer.identity}.`);
+    } else {
+      console.error(`Received request for path ${payload.url} from peer ${peer.identity} with empty allowlist.`);
+    }
+    res.status(403).send("Path not allowed");
+    return;
+  }
 
   // Set some headers
   let headers = payload.headers || {};

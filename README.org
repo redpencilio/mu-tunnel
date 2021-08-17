@@ -44,6 +44,7 @@ This object has the following properties:
   + ~identity~: The identity of this peer and its public key.
   + ~file~: The file storing this peer's public key.
   + ~address~: The external endpoint where this peer can be reached to forward requests.
+  + ~allowed~ (optional): An array of strings indicating the path prefixes this peer is allowed to request. If not present, all incoming requests are rejected.
 
 An example configuration file:
 #+BEGIN_SRC js
@@ -54,12 +55,15 @@ module.exports = {
     passphrase: "hunter2"
   },
   peers: [
-    {identity: "consumer1@redpencil.io",
-     file: "consumer1.asc",
-     address: "http://tunnel-consumer1/secure"},
-    {identity: "consumer2@redpencil.io",
-     file: "consumer2.asc",
-     address: "http://tunnel-consumer2/secure"}
+    { identity: "consumer1@redpencil.io",
+      file: "consumer1.asc",
+      address: "http://tunnel-consumer1/secure",
+      allowed: ["http://identifier/sync/files", "http://identifier/files/"]
+    },
+    { identity: "consumer2@redpencil.io",
+      file: "consumer2.asc",
+      address: "http://tunnel-consumer2/secure"
+    }
   ]
 };
 #+END_SRC
