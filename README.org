@@ -1,0 +1,91 @@
+#+TITLE: mu-tunnel
+
+Service which allows tunneling of HTTP requests between semantic.works stacks securely using the OpenPGP standard.
+
+* API
+mu-tunnel only takes requests from other services on the ~/out~ endpoint using POST.
+
+The POST body should be a JSON object with the following properties:
+- ~peer~: The identity of the destination stack. This is the email address associated with the PGP key for that stack.
+- ~url~: The URL that a request should be forwarded to in the destination stack. This includes the protocol, the hostname, the path and any query parameters if desired.
+- ~method~: The method to use for the request.
+- ~headers~ (optional): A JSON object mapping HTTP headers to their value.
+- ~body~ (optional): The base64 encoded request body.
+
+The response to this request will be the same as if the endpoint specified in ~url~ was contacted directly and requires no special parsing or treatment.
+
+An example request:
+#+BEGIN_SRC js
+{
+  "peer": "destination@redpencil.io",
+  "url": "http://service/endpoint",
+  "method": "POST",
+  "headers": {
+    "Content-Type": "text/plain",
+    "Accept": "application/vnd.api+json"
+  },
+  "body": "cXdmcGFyc3R6eGNkZnBncnN0ZndwdHR2Y2Rxd2ZzdHBmYnRnc2R2YXI="
+}
+#+END_SRC
+
+The ~/secure~ endpoint is where encrypted messages from peers arrive and should not be used by other services.
+
+* Config
+The configuration file is stored at ~/config/config.js~ and takes the form of a CommonJS module exporting a JavaScript object.
+
+Keys are stored in armored form in ~/config/keys/~.
+
+This object has the following properties:
+- ~self~: An object containing information about this tunnel node:
+  + ~identity~: The identity of this node and the private key used by this node.
+  + ~file~: The file storing this node's private key. This key should be passphrase-protected.
+  + ~passphrase~: The passphrase to decrypt this node's private key.
+- ~peers~: An array of peer objects:
+  + ~identity~: The identity of this peer and its public key.
+  + ~file~: The file storing this peer's public key.
+  + ~address~: The external endpoint where this peer can be reached to forward requests.
+
+An example configuration file:
+#+BEGIN_SRC js
+module.exports = {
+  self: {
+    identity: "producer@redpencil.io",
+    file: "producer.asc",
+    passphrase: "hunter2"
+  },
+  peers: [
+    {identity: "consumer1@redpencil.io",
+     file: "consumer1.asc",
+     address: "http://tunnel-consumer1/secure"},
+    {identity: "consumer2@redpencil.io",
+     file: "consumer2.asc",
+     address: "http://tunnel-consumer2/secure"}
+  ]
+};
+#+END_SRC
+
+* HTTPS
+This service *must be ran over HTTPS for strong security*. Without HTTPS messages can easily be intercepted and replayed at a later date, due to PGPs one-pass nature.
+
+* Keys
+RSA and other algorithms over integer fields can be quite slow, as they require very large keys. Elliptic curves offer similar security with smaller key sizes (256 bits instead of 4096 bits) and are thus much faster.
+
+Therefore it is recommended to use elliptic curve keys with this service. Modern versions of ~gpg~ support elliptic curves, but the ~--expert~ flag must be passed to generate these keys.
+
+Curve25519 is a widely used elliptic curve which is also [[https://safecurves.cr.yp.to/rigid.html][rigid]], unlike the NIST curves. It is thus a good choice.
+
+To generate a new GPG key:
+#+BEGIN_EXAMPLE
+gpg --expert --full-generate-key
+#+END_EXAMPLE
+Follow the instructions and do not use a ~(sign only)~ or ~(set your own capabilities)~ key. Elliptic curves may be selected by choosing ~ECC and ECC~.
+
+To export a private key to a file:
+#+BEGIN_EXAMPLE
+gpg --export-secret-keys --armor privkey@example.org > privatekey.asc
+#+END_EXAMPLE
+
+To export a public key to a file:
+#+BEGIN_EXAMPLE
+gpg --export --armor pubkey@example.org > publickey.asc
+#+END_EXAMPLE
