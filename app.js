@@ -8,7 +8,7 @@ import { Buffer } from 'buffer';
 const http = require('http');
 
 // load config
-const config = require('/config/config.js');
+const config = require('/config/config.json');
 
 console.log(process.version);
 console.log(config);
