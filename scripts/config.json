@@ -1,0 +1,65 @@
+{
+  "version": "0.1",
+  "scripts": [
+    {
+      "documentation": {
+        "command": "gen-privkey",
+        "description": "Generate a new private GPG key",
+        "arguments": []
+      },
+      "environment": {
+        "image": "alpine",
+        "interactive": true,
+        "script": "privkey/privkey.sh"
+      },
+      "mounts": {
+        "app": "/data/app/"
+      }
+    },
+    {
+      "documentation": {
+        "command": "gen-pubkey",
+        "description": "Turn a private GPG key into a public GPG key.",
+        "arguments": []
+      },
+      "environment": {
+        "image": "alpine",
+        "interactive": true,
+        "script": "pubkey/pubkey.sh"
+      },
+      "mounts": {
+        "app": "/data/app/"
+      }
+    },
+    {
+      "documentation": {
+        "command": "config-self",
+        "description": "Configure this tunnel's own key and settings.",
+        "arguments": []
+      },
+      "environment": {
+        "image": "python:alpine",
+        "interactive": true,
+        "script": "setself/setself.py"
+      },
+      "mounts": {
+        "app": "/data/app/"
+      }
+    },
+    {
+      "documentation": {
+        "command": "config-peer",
+        "description": "Configure this tunnel's peers.",
+        "arguments": []
+      },
+      "environment": {
+        "image": "python:alpine",
+        "interactive": true,
+        "script": "setpeer/setpeer.py"
+      },
+      "mounts": {
+        "app": "/data/app/"
+      }
+    }
+  ]
+}
