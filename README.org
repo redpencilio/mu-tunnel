@@ -70,12 +70,21 @@ An example configuration file:
 * HTTPS
 This service *must be ran over HTTPS for strong security*. Without HTTPS messages can easily be intercepted and replayed at a later date, due to PGPs one-pass nature.
 
+* Scripts
+This service includes [[https://github.com/mu-semtech/mu-cli][mu-cli]] scripts for key and configuration management:
+- ~gen-privkey~: Generate a new elliptic curve GPG key for use with mu-tunnel
+- ~gen-pubkey~: Convert a private GPG key file into a public GPG key file.
+- ~config-self~: Configure this tunnel service by changing the settings of the key.
+- ~config-peer~: Configure the peers this service connects to.
+
 * Keys
 RSA and other algorithms over integer fields can be quite slow, as they require very large keys. Elliptic curves offer similar security with smaller key sizes (256 bits instead of 4096 bits) and are thus much faster.
 
 Therefore it is recommended to use elliptic curve keys with this service. Modern versions of ~gpg~ support elliptic curves, but the ~--expert~ flag must be passed to generate these keys.
 
 Curve25519 is a widely used elliptic curve which is also [[https://safecurves.cr.yp.to/rigid.html][rigid]], unlike the NIST curves. It is thus a good choice.
+
+The following are instructions to manually generate keys. However, the included mu-cli scripts can also be used for this (and should be easier to use).
 
 To generate a new GPG key:
 #+BEGIN_EXAMPLE

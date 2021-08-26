@@ -1,6 +1,6 @@
-#!/bin/bash
+#!/bin/sh
 
-apk add gpg
+apk add gnupg
 
 # Read input
 
@@ -13,7 +13,7 @@ echo "" # Newline
 GPGTMPHOME=$(mktemp -d)
 
 gpg --homedir "$GPGTMPHOME" --import "/data/app/config/tunnel/keys/$INFILENAME"
-gpg --homedir "$GPGTMPHOME" --export "$EMAIL" > "/data/app/config/tunnel/keys/$OUTFILENAME"
+gpg --homedir "$GPGTMPHOME" --export --armor "$EMAIL" > "/data/app/config/tunnel/keys/$OUTFILENAME"
 
 rm -rf "$GPGTMPHOME"
 

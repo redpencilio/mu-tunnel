@@ -1,6 +1,6 @@
-#!/bin/bash
+#!/bin/sh
 
-apk add gpg
+apk add gnupg
 
 # Read input
 

@@ -13,8 +13,14 @@ const config = require('/config/config.json');
 console.log(process.version);
 console.log(config);
 
-// Load PGP keys
-loadKeys();
+if(!config || !config.self || !config.peers) {
+  console.log("Config incomplete, sleeping for 60 seconds to allow script discovery.");
+  setTimeout(() => loadKeys(), 60000)
+} else {
+  // Load PGP keys
+  loadKeys();
+}
+
 
 // Enable compression
 pgp.config.compressionLevel = process.env.PGP_COMPRESSION_LEVEL || 9;
