@@ -15,7 +15,7 @@ The POST body should be a JSON object with the following properties:
 The response to this request will be the same as if the endpoint specified in ~url~ was contacted directly and requires no special parsing or treatment.
 
 An example request:
-#+BEGIN_SRC js
+#+BEGIN_SRC json
 {
   "peer": "destination@redpencil.io",
   "url": "http://service/endpoint",
@@ -31,11 +31,11 @@ An example request:
 The ~/secure~ endpoint is where encrypted messages from peers arrive and should not be used by other services.
 
 * Config
-The configuration file is stored at ~/config/config.js~ and takes the form of a CommonJS module exporting a JavaScript object.
-
 Keys are stored in armored form in ~/config/keys/~.
 
-This object has the following properties:
+The configuration file is stored at ~/config/config.json~.
+
+The configuration object has the following properties:
 - ~self~: An object containing information about this tunnel node:
   + ~identity~: The identity of this node and the private key used by this node.
   + ~file~: The file storing this node's private key. This key should be passphrase-protected.
@@ -47,24 +47,24 @@ This object has the following properties:
   + ~allowed~ (optional): An array of strings indicating the path prefixes this peer is allowed to request. If not present, all incoming requests are rejected.
 
 An example configuration file:
-#+BEGIN_SRC js
-module.exports = {
-  self: {
-    identity: "producer@redpencil.io",
-    file: "producer.asc",
-    passphrase: "hunter2"
+#+BEGIN_SRC json
+{
+  "self": {
+    "identity": "producer@redpencil.io",
+    "file": "producer.asc",
+    "passphrase": "hunter2"
   },
-  peers: [
-    { identity: "consumer1@redpencil.io",
-      file: "consumer1.asc",
-      allowed: ["http://identifier/sync/files", "http://identifier/files/"]
+  "peers": [
+    { "identity": "consumer1@redpencil.io",
+      "file": "consumer1.asc",
+      "allowed": ["http://identifier/sync/files", "http://identifier/files/"]
     },
-    { identity: "consumer2@redpencil.io",
-      file: "consumer2.asc",
-      address: "http://tunnel-consumer2/secure"
+    { "identity": "consumer2@redpencil.io",
+      "file": "consumer2.asc",
+      "address": "http://tunnel-consumer2/secure"
     }
   ]
-};
+}
 #+END_SRC
 
 * HTTPS
