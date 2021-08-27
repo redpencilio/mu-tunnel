@@ -283,7 +283,7 @@ async function checkKey(key, identity) {
   if (Date() > expire) {
     throw `Key ${keyid} (${user}) expired on ${expire}.`;
   } else if(expire === Infinity) {
-    console.warning(`Key ${keyid} (${user}) has no expiry.`);
+    console.warn(`Key ${keyid} (${user}) has no expiry.`);
   }
 
   if (user !== identity) {
