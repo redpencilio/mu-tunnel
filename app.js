@@ -7,24 +7,31 @@ import { Buffer } from 'buffer';
 import * as http from "http";
 import * as https from "https";
 import url from 'url';
-
 // load config
 import * as config from "/config/config.json";
+
+// Environment
+const TUNNEL_LOG_INBOUND = process.env.TUNNEL_LOG_INBOUND || false;
+const TUNNEL_LOG_OUTBOUND = process.env.TUNNEL_LOG_OUTBOUND || false;
+const DISABLE_HTTPS = process.env.DISABLE_HTTPS || false;
+const PGP_COMPRESSION_LEVEL = process.env.PGP_COMPRESSION_LEVEL || 9;
 
 console.log(process.version);
 console.log(config);
 
 // Initiate https
-const certOptions = {
-  key: fs.readFileSync(`/config/cert/${config.self.httpskeyfile}`),
-  cert: fs.readFileSync(`/config/cert/${config.self.httpscertfile}`)
-};
-https.createServer(certOptions, app).listen(443);
+if (!DISABLE_HTTPS) {
+  const certOptions = {
+    key: fs.readFileSync(`/config/cert/${config.self.httpskeyfile}`),
+    cert: fs.readFileSync(`/config/cert/${config.self.httpscertfile}`)
+  };
+  https.createServer(certOptions, app).listen(443);
+}
 
 checkConfig();
 
 // Enable compression
-pgp.config.compressionLevel = process.env.PGP_COMPRESSION_LEVEL || 9;
+pgp.config.compressionLevel = PGP_COMPRESSION_LEVEL;
 pgp.config.preferredCompressionAlgorithm = pgp.enums.compression.zlib;
 
 // Endpoint for INBOUND messages, e.g. another tunnel service relaying a remote message
@@ -89,7 +96,7 @@ app.post('/secure', async (req, res) => {
     throw err;
   }
 
-  if (process.env.TUNNEL_LOG_INBOUND) {
+  if (TUNNEL_LOG_INBOUND) {
     console.log(`Received message from ${peer.identity}: ${JSON.stringify(payload, undefined, 2)}`);
   }
   else {
@@ -149,7 +156,7 @@ app.all('/*', async (req, res) => {
   const originalPath = req.originalUrl;
   console.log("Message for tunnel received");
   console.log("Path on tunnel proxy", originalPath);
-  console.log("TUNNEL_LOG_OUTBOUND: ", process.env.TUNNEL_LOG_OUTBOUND);
+  console.log("TUNNEL_LOG_OUTBOUND: ", TUNNEL_LOG_OUTBOUND);
   //console.log("Request object", req);
 
   //if (process.env.TUNNEL_LOG_OUTBOUND) {
@@ -251,12 +258,22 @@ app.all('/*', async (req, res) => {
 // Wrap https.request in a promise
 function httpPromise(addr, headers, method, body) {
   return new Promise((resolve, reject) => {
-    console.log(`Sending an https request to ${method}: ${addr}`);
-    const protocol = (new url.URL(addr)).protocol;
-    console.log("protocol:", protocol);
-    const http_s = (protocol === "http:" ? http : https);
-    console.log("Initiating request");
-    const req = http_s.request(addr, { headers, method }, forwardres => resolve(forwardres));
+    let addrUrl = new url.URL(addr);
+    console.log(`Sending a request to ${method}: ${addrUrl}`);
+    let http_s;
+    if (addrUrl.protocol === "https:") {
+      if (DISABLE_HTTPS) {
+        //Not so good, attempting to fix a weird situation
+        addrUrl = addrUrl.toString().replace(/^https/, "http");
+        console.log(`HTTPS disabled, sending a request instead to ${method}: ${addrUrl}`);
+        http_s = http;
+      }
+      else
+        http_s = https;
+    }
+    else
+      http_s = http;
+    const req = http_s.request(addrUrl, { headers, method }, forwardres => resolve(forwardres));
     req.on('error', err => reject(err));
     if (body) {
       req.write(body)
@@ -325,8 +342,8 @@ async function checkConfig() {
                           || !config.self.keyfile
                           || !config.self.passphrase
                           || !config.self.stackentry
-                          || !config.self.httpskeyfile
-                          || !config.self.httpscertfile);
+                          || !(config.self.httpskeyfile || DISABLE_HTTPS)
+                          || !(config.self.httpscertfile || DISABLE_HTTPS));
   const peerConfigMissing = (!config.peer
                           || !config.peer.identity
                           || !config.peer.keyfile
