@@ -19,16 +19,21 @@ const PGP_COMPRESSION_LEVEL = process.env.PGP_COMPRESSION_LEVEL || 9;
 console.log(process.version);
 console.log(config);
 
-// Initiate https
-if (!DISABLE_HTTPS) {
-  const certOptions = {
-    key: fs.readFileSync(`/config/cert/${config.self.httpskeyfile}`),
-    cert: fs.readFileSync(`/config/cert/${config.self.httpscertfile}`)
-  };
-  https.createServer(certOptions, app).listen(443);
-}
-
-checkConfig();
+checkConfig()
+.then(() => {
+  // Initiate https
+  if (!DISABLE_HTTPS) {
+    const certOptions = {
+      key: fs.readFileSync(`/config/cert/${config.self.httpskeyfile}`),
+      cert: fs.readFileSync(`/config/cert/${config.self.httpscertfile}`)
+    };
+    https.createServer(certOptions, app).listen(443);
+  }
+  return;
+}).catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
 
 // Enable compression
 pgp.config.compressionLevel = PGP_COMPRESSION_LEVEL;
@@ -349,8 +354,7 @@ async function checkConfig() {
                           || !config.peer.keyfile
                           || !config.peer.address);
   if (selfConfigMissing || peerConfigMissing) {
-    console.log("Config incomplete, sleeping for 60 seconds to allow script discovery.");
-    setTimeout(async () => await loadKeys(), 60000);
+    throw new Error("Config incomplete");
   }
   else {
     // Load PGP keys
