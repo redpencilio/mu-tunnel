@@ -1,11 +1,11 @@
 // see https://github.com/mu-semtech/mu-javascript-template for more info
-import { app, errorHandler, uuid, sparqlEscapeDateTime } from 'mu';
-import { querySudo as query, updateSudo as update } from '@lblod/mu-auth-sudo';
+import { app, uuid } from 'mu';
 import * as express from "express";
 import fs from 'fs';
 import * as pgp from 'openpgp';
 import { Buffer } from 'buffer';
 import * as http from "http";
+import * as https from "https";
 import url from 'url';
 
 // load config
@@ -13,6 +13,13 @@ import * as config from "/config/config.json";
 
 console.log(process.version);
 console.log(config);
+
+// Initiate https
+const certOptions = {
+  key: fs.readFileSync(`/config/cert/${config.self.httpskeyfile}`),
+  cert: fs.readFileSync(`/config/cert/${config.self.httpscertfile}`)
+};
+https.createServer(certOptions, app).listen(443);
 
 checkConfig();
 
@@ -162,7 +169,6 @@ app.all('/*', async (req, res) => {
   else
     console.log("Requestbody is NOT empty");
   // Create an encapsulated JSON object with an accurate representation of the incoming HTTP request to send forward
-  // TODO check this object ↓
   const requestObj = {
     method: req.method,
     path: originalPath,
@@ -242,19 +248,21 @@ app.all('/*', async (req, res) => {
   console.log(`Succesfully handled request to ${peer.identity}.`);
 });
 
-// Wrap http.request in a promise
+// Wrap https.request in a promise
 function httpPromise(addr, headers, method, body) {
   return new Promise((resolve, reject) => {
-    console.log(`Sending an http request to ${method}: ${addr}`);
-    let req = http.request(addr,
-                           { headers: headers,
-                             method: method },
-                           forwardres => resolve(forwardres) )
-    req.on('error', err => reject(err))
-    if(body) {
+    console.log(`Sending an https request to ${method}: ${addr}`);
+    const protocol = (new url.URL(addr)).protocol;
+    console.log("protocol:", protocol);
+    const http_s = (protocol === "http:" ? http : https);
+    console.log("Initiating request");
+    const req = http_s.request(addr, { headers, method }, forwardres => resolve(forwardres));
+    req.on('error', err => reject(err));
+    if (body) {
       req.write(body)
     }
     req.end();
+    console.log("Request sent");
   });
 }
 
@@ -316,7 +324,9 @@ async function checkConfig() {
                           || !config.self.identity
                           || !config.self.keyfile
                           || !config.self.passphrase
-                          || !config.self.stackentry);
+                          || !config.self.stackentry
+                          || !config.self.httpskeyfile
+                          || !config.self.httpscertfile);
   const peerConfigMissing = (!config.peer
                           || !config.peer.identity
                           || !config.peer.keyfile
