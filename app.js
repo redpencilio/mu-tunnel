@@ -6,6 +6,7 @@ import bodyParser from 'body-parser';
 import * as pgp from 'openpgp';
 import { Buffer } from 'buffer';
 import * as http from "http";
+import url from 'url';
 
 // load config
 const config = require('/config/config.json');
@@ -68,7 +69,7 @@ app.post('/secure', async (req, res) => {
     throw err;
   }
 
-  // Connect the verified signature to a known peer
+  // Connect the verified signature to a known peer, only one in this case
   const peer = config.peer;
   //const peer = config.peers.find(peer => signatures[0].keyID.equals(peer.key.getKeyID()));
 
@@ -90,18 +91,6 @@ app.post('/secure', async (req, res) => {
     console.log(`Received message from ${peer.identity}.`);
   }
 
-  // Check if the request URL matches any of the allowed path prefixes.
-  if (!peer.allowed || peer.allowed.find(prefix => payload.url.startsWith(prefix)) === undefined) {
-    if (peer.allowed && peer.allowed.length > 0) {
-      console.error(`Received request for path ${payload.url} not in allowlist ${peer.allowed.toString()} of ${peer.identity}.`);
-    }
-    else {
-      console.error(`Received request for path ${payload.url} from peer ${peer.identity} with empty allowlist.`);
-    }
-    res.status(403).send("Path not allowed");
-    throw err;
-  }
-
   // Set some headers
   let headers = payload.headers || {};
   headers['mu-call-id'] = uuid();
@@ -113,8 +102,9 @@ app.post('/secure', async (req, res) => {
   // Forward the request and construct a response object.
   let resobj;
   try {
-    let body = payload.body ? Buffer.from(payload.body, 'base64') : undefined;
-    let forwardres = await httpPromise(payload.url, headers, payload.method, body);
+    const body = payload.body ? Buffer.from(payload.body, 'base64') : undefined;
+    const url = new url.URL(config.self.stackentry.concat(payload.path)).toString();
+    let forwardres = await httpPromise(url, headers, payload.method, body);
     resobj = await new Promise((resolve, reject) => {
       let chunks = [];
       forwardres.on('data', chunk => chunks.push(chunk));
@@ -147,7 +137,10 @@ app.post('/secure', async (req, res) => {
 });
 
 // Endpoint for OUTBOUND messages, e.g. internal services that want to contact another stack.
-app.post('/out', async (req, res) => {
+app.all('/*', async (req, res) => {
+  //This URL contains the path that needs to be re-sent on the other tunnel end.
+  const originalPath = req.originalUrl;
+
   if (process.env.TUNNEL_LOG_OUTBOUND) {
     console.log(`Received message: ${JSON.stringify(req.body, undefined, 2)}`);
   }
@@ -156,18 +149,20 @@ app.post('/out', async (req, res) => {
   }
 
   const peer = config.peer;
-  //TODO checking for an address can be done beforehand since there is only one peer and there should always be an address
-  if (!peer.address) {
-    console.error(`No address for peer ${peer.identity}.`);
-    res.status(400).send("No peer address.");
-    throw err;
-  }
+
+  // Create an encapsulated JSON object with an accurate representation of the incoming HTTP request to send forward
+  // TODO check this object ↓
+  const requestObj = {
+    path: originalPath,
+    body: Buffer.from(req.body).toString("base64"),
+    headers: req.headers
+  };
 
   // Encrypt the message
   let encrypted;
   try {
     encrypted = await pgp.encrypt({
-      message: await pgp.createMessage({ text: JSON.stringify(req.body) }),
+      message: await pgp.createMessage({ text: JSON.stringify(requestObj) }),
       encryptionKeys: peer.key,
       signingKeys: config.self.key,
       format: 'armored'
@@ -249,23 +244,22 @@ function httpPromise(addr, headers, method, body) {
 
 async function loadKeys() {
   try {
-    for (let peer of config.peers) {
-      const key = await pgp.readKey({armoredKey: await readKeyFile(peer.file)});
-      await checkKey(key, peer.identity); // Kind of hacky to only have a function that throws exceptions, but its the simplest
-      peer.key = key;
+    let peer = config.peer;
+    const peerkey = await pgp.readKey({ armoredKey: await readKeyFile(peer.keyfile) });
+    await checkKey(peerkey, peer.identity); // Kind of hacky to only have a function that throws exceptions, but its the simplest
+    peer.key = peerkey;
 
-      console.log(`Loaded peer public key ${key.getKeyID().toHex()} (${peer.identity}) from ${peer.file}.`);
-    }
+    console.log(`Loaded peer public key ${peerkey.getKeyID().toHex()} (${peer.identity}) from ${peer.keyfile}.`);
 
     const self = config.self;
     const key = await pgp.decryptKey({
-      privateKey: await pgp.readPrivateKey({armoredKey: await readKeyFile(self.file)}),
+      privateKey: await pgp.readPrivateKey({ armoredKey: await readKeyFile(self.keyfile) }),
       passphrase: config.self.passphrase
     });
     await checkKey(key, self.identity);
     config.self.key = key;
 
-    console.log(`Loaded self secret key ${key.getKeyID().toHex()} (${self.identity}) from ${self.file}.`);
+    console.log(`Loaded self secret key ${key.getKeyID().toHex()} (${self.identity}) from ${self.keyfile}.`);
   }
   catch (err) {
     console.error("Exception during key loading, aborting.", err)
@@ -279,7 +273,8 @@ async function checkKey(key, identity) {
   const user = (await key.getPrimaryUser()).user.userID.userID;
   if (Date() > expire) {
     throw `Key ${keyid} (${user}) expired on ${expire}.`;
-  } else if (expire === Infinity) {
+  }
+  else if (expire === Infinity) {
     console.warn(`Key ${keyid} (${user}) has no expiry.`);
   }
 
@@ -296,12 +291,23 @@ async function readKeyFile(file) {
       else
         resolve(data);
     });
+  });
 }
 
-function checkConfig() {
-  if (!config || !config.self || !config.peer || !config.peer.address) {
+async function checkConfig() {
+  if (!config) throw new Error("No config found");
+  const selfConfigMissing = (!config.self
+                          || !config.self.identity
+                          || !config.self.keyfile
+                          || !config.self.passphrase
+                          || !config.self.stackentry);
+  const peerConfigMissing = (!config.peer
+                          || !config.peer.identity
+                          || !config.peer.keyfile
+                          || !config.peer.address);
+  if (selfConfigMissing || peerConfigMissing) {
     console.log("Config incomplete, sleeping for 60 seconds to allow script discovery.");
-    setTimeout(async () => await loadKeys(), 60000)
+    setTimeout(async () => await loadKeys(), 60000);
   }
   else {
     // Load PGP keys
