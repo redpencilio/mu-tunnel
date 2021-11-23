@@ -1,15 +1,15 @@
 // see https://github.com/mu-semtech/mu-javascript-template for more info
 import { app, errorHandler, uuid, sparqlEscapeDateTime } from 'mu';
 import { querySudo as query, updateSudo as update } from '@lblod/mu-auth-sudo';
+import * as express from "express";
 import fs from 'fs';
-import bodyParser from 'body-parser';
 import * as pgp from 'openpgp';
 import { Buffer } from 'buffer';
 import * as http from "http";
 import url from 'url';
 
 // load config
-const config = require('/config/config.json');
+import * as config from "/config/config.json";
 
 console.log(process.version);
 console.log(config);
@@ -20,11 +20,9 @@ checkConfig();
 pgp.config.compressionLevel = process.env.PGP_COMPRESSION_LEVEL || 9;
 pgp.config.preferredCompressionAlgorithm = pgp.enums.compression.zlib;
 
-app.use(bodyParser.json({ type: "application/json" }));
-app.use(bodyParser.text({ type: "text/plain" }));
-app.use(bodyParser.raw({ type: "application/octet-stream" }));
-
 // Endpoint for INBOUND messages, e.g. another tunnel service relaying a remote message
+app.use("/secure", express.text());
+app.use("/secure", express.raw());
 app.post('/secure', async (req, res) => {
   // Read the PGP message
   let message;
@@ -103,8 +101,9 @@ app.post('/secure', async (req, res) => {
   let resobj;
   try {
     const body = payload.body ? Buffer.from(payload.body, 'base64') : undefined;
-    const url = new url.URL(config.self.stackentry.concat(payload.path)).toString();
-    let forwardres = await httpPromise(url, headers, payload.method, body);
+    const forwardUrl = (new url.URL(payload.path, config.self.stackentry)).toString();
+    console.log("Will forward request to ", forwardUrl);
+    let forwardres = await httpPromise(forwardUrl, headers, payload.method, body);
     resobj = await new Promise((resolve, reject) => {
       let chunks = [];
       forwardres.on('data', chunk => chunks.push(chunk));
@@ -137,11 +136,17 @@ app.post('/secure', async (req, res) => {
 });
 
 // Endpoint for OUTBOUND messages, e.g. internal services that want to contact another stack.
+app.use("/*", express.raw({ type: "*/*" })); 
 app.all('/*', async (req, res) => {
   //This URL contains the path that needs to be re-sent on the other tunnel end.
   const originalPath = req.originalUrl;
+  console.log("Message for tunnel received");
+  console.log("Path on tunnel proxy", originalPath);
+  console.log("TUNNEL_LOG_OUTBOUND: ", process.env.TUNNEL_LOG_OUTBOUND);
+  //console.log("Request object", req);
 
-  if (process.env.TUNNEL_LOG_OUTBOUND) {
+  //if (process.env.TUNNEL_LOG_OUTBOUND) {
+  if (true) {
     console.log(`Received message: ${JSON.stringify(req.body, undefined, 2)}`);
   }
   else {
@@ -150,13 +155,21 @@ app.all('/*', async (req, res) => {
 
   const peer = config.peer;
 
+  console.log("Creating encapsulated request");
+  const emptyBody = (Object.keys(req.body).length === 0);
+  if (emptyBody)
+    console.log("Requestbody is empty");
+  else
+    console.log("Requestbody is NOT empty");
   // Create an encapsulated JSON object with an accurate representation of the incoming HTTP request to send forward
   // TODO check this object ↓
   const requestObj = {
+    method: req.method,
     path: originalPath,
-    body: Buffer.from(req.body).toString("base64"),
+    body: Buffer.from((emptyBody ? "" : req.body)).toString("base64"),
     headers: req.headers
   };
+  console.log("Request object: ", requestObj);
 
   // Encrypt the message
   let encrypted;
@@ -173,6 +186,8 @@ app.all('/*', async (req, res) => {
     res.status(500).send("Failed to encrypt.");
     throw err;
   }
+
+  //console.log("Encrypted message:", encrypted);
 
   // Send the encrypted message and read the response
   let message;
@@ -230,6 +245,7 @@ app.all('/*', async (req, res) => {
 // Wrap http.request in a promise
 function httpPromise(addr, headers, method, body) {
   return new Promise((resolve, reject) => {
+    console.log(`Sending an http request to ${method}: ${addr}`);
     let req = http.request(addr,
                            { headers: headers,
                              method: method },
