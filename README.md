@@ -41,6 +41,8 @@ The folder and file structure for the configuration of this tunnel should look l
   
 The `config.json` file contains the configuration. The `cert` folder contains keys and certificates for enabling HTTPS, and the `keys` folder contains the OpenPGP keys for encryption.
 
+In Docker, mount this folder under the `/config` path.
+
 ### `config.json` file
 
 A configuration file contains the following objects and properties:
@@ -59,7 +61,7 @@ A configuration file contains the following objects and properties:
 
 A sample configuration looks like this:
 
-```
+```javascript
 {
   "self": {
     "identity":      "producer@redpencil.io",
@@ -84,7 +86,7 @@ The following environment variables can be used:
 * `TUNNEL_LOG_INBOUND`: enables some logging about incoming messages to this tunnel (default: false)
 * `TUNNEL_LOG_OUTBOUND`: enables some logging about outgoing messages to this tunnel (default: false)
 * `DISABLE_HTTPS`: set to true if you do not want HTTPS being used, but HTTP (default: false)
-* `PGP_COMPRESSION_LEVEL`: set the compression level for the PGP encryption
+* `PGP_COMPRESSION_LEVEL`: set the compression level for the PGP encryption (0 - 9, default: 9)
 
 The following environment variable is a bit hacky:
 
@@ -102,13 +104,13 @@ openssl req -new -key key.pem -out csr.pem
 openssl x509 -req -days 9999 -in csr.pem -signkey key.pem -out cert.pem
 rm csr.pem
 ```
-(Source: [https://nodejs.org/en/knowledge/HTTP/servers/how-to-create-a-HTTPS-server/](How to create an https server?))
+(Source: [How to create an https server?](https://nodejs.org/en/knowledge/HTTP/servers/how-to-create-a-HTTPS-server/))
 
 **The rest of this file is taken from the original mu-tunnel.**
 
 ## Scripts
 
-This service includes [https://github.com/mu-semtech/mu-cli](mu-cli) scripts for key and configuration management:
+This service includes [mu-cli](https://github.com/mu-semtech/mu-cli) scripts for key and configuration management:
 * `gen-privkey`: Generate a new elliptic curve GPG key for use with mu-tunnel
 * `gen-pubkey`: Convert a private GPG key file into a public GPG key file.
 * `config-self`: Configure this tunnel service by changing the settings of the key.
