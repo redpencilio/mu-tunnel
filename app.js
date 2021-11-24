@@ -11,8 +11,8 @@ import url from 'url';
 import * as config from "/config/config.json";
 
 // Environment
-const TUNNEL_LOG_INBOUND = process.env.TUNNEL_LOG_INBOUND || false;
-const TUNNEL_LOG_OUTBOUND = process.env.TUNNEL_LOG_OUTBOUND || false;
+const TUNNEL_LOG_INBOUND = process.env.TUNNEL_LOG_INBOUND == "true" || false;
+const TUNNEL_LOG_OUTBOUND = process.env.TUNNEL_LOG_OUTBOUND == "true" || false;
 const DISABLE_HTTPS = process.env.DISABLE_HTTPS || false;
 const PGP_COMPRESSION_LEVEL = process.env.PGP_COMPRESSION_LEVEL || 9;
 
@@ -121,7 +121,8 @@ app.post('/secure', async (req, res) => {
   try {
     const body = payload.body ? Buffer.from(payload.body, 'base64') : undefined;
     const forwardUrl = (new url.URL(payload.path, config.self.stackentry)).toString();
-    console.log("Will forward request to ", forwardUrl);
+    if (TUNNEL_LOG_OUTBOUND)
+      console.log("Will forward request to ", forwardUrl);
     let forwardres = await httpPromise(forwardUrl, headers, payload.method, body);
     resobj = await new Promise((resolve, reject) => {
       let chunks = [];
@@ -151,7 +152,8 @@ app.post('/secure', async (req, res) => {
   res.set('Content-Type', 'text/plain')
      .status(200)
      .send(encrypted);
-  console.log(`Succesfully responded to message from ${peer.identity}.`);
+  if (TUNNEL_LOG_OUTBOUND)
+    console.log(`Succesfully responded to message from ${peer.identity}.`);
 });
 
 // Endpoint for OUTBOUND messages, e.g. internal services that want to contact another stack.
@@ -159,13 +161,8 @@ app.use("/*", express.raw({ type: "*/*" }));
 app.all('/*', async (req, res) => {
   //This URL contains the path that needs to be re-sent on the other tunnel end.
   const originalPath = req.originalUrl;
-  console.log("Message for tunnel received");
-  console.log("Path on tunnel proxy", originalPath);
-  console.log("TUNNEL_LOG_OUTBOUND: ", TUNNEL_LOG_OUTBOUND);
-  //console.log("Request object", req);
 
-  //if (process.env.TUNNEL_LOG_OUTBOUND) {
-  if (true) {
+  if (TUNNEL_LOG_OUTBOUND) {
     console.log(`Received message: ${JSON.stringify(req.body, undefined, 2)}`);
   }
   else {
@@ -174,12 +171,8 @@ app.all('/*', async (req, res) => {
 
   const peer = config.peer;
 
-  console.log("Creating encapsulated request");
+  //"Boolean" (truthy, falsy) for if the body is empty
   const emptyBody = (Object.keys(req.body).length === 0);
-  if (emptyBody)
-    console.log("Requestbody is empty");
-  else
-    console.log("Requestbody is NOT empty");
   // Create an encapsulated JSON object with an accurate representation of the incoming HTTP request to send forward
   const requestObj = {
     method: req.method,
@@ -187,7 +180,6 @@ app.all('/*', async (req, res) => {
     body: Buffer.from((emptyBody ? "" : req.body)).toString("base64"),
     headers: req.headers
   };
-  console.log("Request object: ", requestObj);
 
   // Encrypt the message
   let encrypted;
@@ -204,8 +196,6 @@ app.all('/*', async (req, res) => {
     res.status(500).send("Failed to encrypt.");
     throw err;
   }
-
-  //console.log("Encrypted message:", encrypted);
 
   // Send the encrypted message and read the response
   let message;
@@ -257,20 +247,23 @@ app.all('/*', async (req, res) => {
   }
   res.status(payload.status)
      .send(Buffer.from(payload.body, 'base64'));
-  console.log(`Succesfully handled request to ${peer.identity}.`);
+  if (TUNNEL_LOG_OUTBOUND)
+    console.log(`Succesfully handled request to ${peer.identity}.`);
 });
 
 // Wrap https.request in a promise
 function httpPromise(addr, headers, method, body) {
   return new Promise((resolve, reject) => {
     let addrUrl = new url.URL(addr);
-    console.log(`Sending a request to ${method}: ${addrUrl}`);
+    if (TUNNEL_LOG_OUTBOUND)
+      console.log(`Sending a request to ${method}: ${addrUrl}`);
     let http_s;
     if (addrUrl.protocol === "https:") {
       if (DISABLE_HTTPS) {
         //Not so good, attempting to fix a weird situation
         addrUrl = addrUrl.toString().replace(/^https/, "http");
-        console.log(`HTTPS disabled, sending a request instead to ${method}: ${addrUrl}`);
+        if (TUNNEL_LOG_OUTBOUND)
+          console.log(`HTTPS disabled, sending a request instead to ${method}: ${addrUrl}`);
         http_s = http;
       }
       else
@@ -284,7 +277,8 @@ function httpPromise(addr, headers, method, body) {
       req.write(body)
     }
     req.end();
-    console.log("Request sent");
+    if (TUNNEL_LOG_OUTBOUND)
+      console.log("Request sent");
   });
 }
 
