@@ -122,7 +122,7 @@ RSA and other algorithms over integer fields can be quite slow, as they require 
 
 Therefore it is recommended to use elliptic curve keys with this service. Modern versions of `gpg` support elliptic curves, but the `--expert` flag must be passed to generate these keys.
 
-Curve25519 is a widely used elliptic curve which is also [https://safecurves.cr.yp.to/rigid.html](rigid), unlike the NIST curves. It is thus a good choice.
+Curve25519 is a widely used elliptic curve which is also [rigid](https://safecurves.cr.yp.to/rigid.html), unlike the NIST curves. It is thus a good choice.
 
 The following are instructions to manually generate keys. However, the included mu-cli scripts can also be used for this (and should be easier to use).
 
