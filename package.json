@@ -5,9 +5,7 @@
   "type": "module",
   "dependencies": {
     "@lblod/mu-auth-sudo": "^0.2.0",
-    "fs-extra": "^8.0.1",
-    "openpgp": "^5.0.0-0",
-    "request": "^2"
+    "openpgp": "^5.0.0-0"
   },
   "devDependencies": {},
   "scripts": {
