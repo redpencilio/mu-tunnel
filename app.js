@@ -14,7 +14,7 @@ import * as config from "/config/config.json";
 const TUNNEL_LOG_INBOUND = process.env.TUNNEL_LOG_INBOUND == "true" || false;
 const TUNNEL_LOG_OUTBOUND = process.env.TUNNEL_LOG_OUTBOUND == "true" || false;
 const DISABLE_HTTPS = process.env.DISABLE_HTTPS || false;
-const PGP_COMPRESSION_LEVEL = process.env.PGP_COMPRESSION_LEVEL || 9;
+const PGP_COMPRESSION_LEVEL = process.env.PGP_COMPRESSION_LEVEL || 0;
 
 console.log(process.version);
 console.log(config);
@@ -40,7 +40,7 @@ pgp.config.compressionLevel = PGP_COMPRESSION_LEVEL;
 pgp.config.preferredCompressionAlgorithm = pgp.enums.compression.zlib;
 
 // Endpoint for INBOUND messages, e.g. another tunnel service relaying a remote message
-app.use("/secure", express.text());
+app.use("/secure", express.text({ limit: "1000mb" }));
 app.use("/secure", express.raw());
 app.post('/secure', async (req, res) => {
   // Read the PGP message
@@ -157,7 +157,7 @@ app.post('/secure', async (req, res) => {
 });
 
 // Endpoint for OUTBOUND messages, e.g. internal services that want to contact another stack.
-app.use("/*", express.raw({ type: "*/*" })); 
+app.use("/*", express.raw({ type: "*/*", limit: "1000mb" })); 
 app.all('/*', async (req, res) => {
   //This URL contains the path that needs to be re-sent on the other tunnel end.
   const originalPath = req.originalUrl;
