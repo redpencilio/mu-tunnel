@@ -81,8 +81,6 @@ The following environment variables can be used:
 * `DISABLE_HTTPS`: set to true if you do not want HTTPS being used, but HTTP (default: false)
 * `PGP_COMPRESSION_LEVEL`: set the compression level for the PGP encryption (0 - 9, default: 9)
 
-**The rest of this file is taken from the original mu-tunnel.**
-
 ## Scripts
 
 This service includes [mu-cli](https://github.com/mu-semtech/mu-cli) scripts for key and configuration management:
@@ -120,4 +118,26 @@ To export a public key to a file:
 ```
 gpg --export --armor pubkey@example.org > publickey.asc
 ```
+
+## Performance
+
+Because this tunnel can see a lot of usage in the future, some performance testing might indicate a throughput bottleneck. Here is a summary of some basic tests taken on a 2-core (4-core with SMT) CPU. The specific details are not that important as these performance tests will merely give an indication of throughput.
+
+### Large request
+
+On large requests, the tunnel has a throughput of about 0.90MB/s. CPU usage was around 25% with peaks to 35%. RAM usage was up to 1.5GB.
+
+A 'large' request was constructed by creating a string with random text of about 10MB. This string serves as the body of a simple POST request. This request is sent to the outgoing tunnel service, which encrypts the data, uses compression to try to reduce file size, sends it to the other tunnel service, which decrypts the message and sends it to the destination service. The destination service responds by just echoing the request and all the data is sent back to the source service. 10 large requests were executed sequentially, meaning around 200MB was sent over the tunnel with little overhead in the source and destination services.
+
+The CPU usage can be explained. JavaScript (Node.js) is mostly single threaded, apart for some IO and things. The cryptography runs in (not native) JavaScript libraries which limits the CPU usage to 25% (one CPU core in full use). Peaks to 35% can be observed because at certain points in time, one service is sending a request while the other is receiving due to the data not fitting in a single ethernet frame. The overall high CPU usage is because of the compute intensive encryption operations. High RAM usage can be explained by the encryption and compression algorithms requiring large amounts of space.
+
+### Small requests
+
+On small requests, the tunnel has a throughput of about 167requests/s. CPU usage was about 2%, and RAM usage not significantly more than a few 10MB's.
+
+A small request is constructed with little or no data in the body, and a few or no special headers. Each request is less than a KB of data. The request path is the sames as described in the previous section. In total, 48000 request were sent through the tunnel in this test setup.
+
+The CPU usage is very low in this case. This can be explained by overhead. Encryption is a relative small part of the total compute time for these small requests.
+
+In the real world, the throughput will be between the measurements for large and small requests and might differ significantly on other systems. When using other encryption algorithms, Node.js could potentially opt for using more native encryption libraries wich could provide better throughput.
 
