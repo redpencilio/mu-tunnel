@@ -20,17 +20,7 @@ console.log(process.version);
 console.log(config);
 
 checkConfig()
-.then(() => {
-  // Initiate https
-  if (!DISABLE_HTTPS) {
-    const certOptions = {
-      key: fs.readFileSync(`/config/cert/${config.self.httpskeyfile}`),
-      cert: fs.readFileSync(`/config/cert/${config.self.httpscertfile}`)
-    };
-    https.createServer(certOptions, app).listen(443);
-  }
-  return;
-}).catch((err) => {
+.catch((err) => {
   console.error(err);
   process.exit(1);
 });
@@ -251,8 +241,9 @@ app.all('/*', async (req, res) => {
     console.log(`Succesfully handled request to ${peer.identity}.`);
 });
 
-// Wrap https.request in a promise
+// Wrap http(s).request in a promise
 function httpPromise(addr, headers, method, body) {
+  //It seems hacky to select the library based on the protocol string, maybe later use an external library like `fetch`
   return new Promise((resolve, reject) => {
     let addrUrl = new url.URL(addr);
     if (TUNNEL_LOG_OUTBOUND)
@@ -340,9 +331,7 @@ async function checkConfig() {
                           || !config.self.identity
                           || !config.self.keyfile
                           || !config.self.passphrase
-                          || !config.self.stackentry
-                          || !(config.self.httpskeyfile || DISABLE_HTTPS)
-                          || !(config.self.httpscertfile || DISABLE_HTTPS));
+                          || !config.self.stackentry);
   const peerConfigMissing = (!config.peer
                           || !config.peer.identity
                           || !config.peer.keyfile

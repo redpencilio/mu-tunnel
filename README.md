@@ -31,15 +31,12 @@ The folder and file structure for the configuration of this tunnel should look l
 
 ```
 ├── config.json
-├── cert
-│   ├── cert.pem
-│   └── key.pem
 └── keys
     ├── producer-pub.asc
     └── producer-priv.asc
 ```
   
-The `config.json` file contains the configuration. The `cert` folder contains keys and certificates for enabling HTTPS, and the `keys` folder contains the OpenPGP keys for encryption.
+The `config.json` file contains the configuration. The `keys` folder contains the OpenPGP keys for encryption.
 
 In Docker, mount this folder under the `/config` path.
 
@@ -52,8 +49,6 @@ A configuration file contains the following objects and properties:
   * `keyfile`: the path to the file storing this node's private key. This is a relative path starting from `keys/`. This key should be passphrase-protected.
   * `passphrase`: the passphrase to decrypt this node's private key
   * `stackentry`: the root URL to the service that the tunnel will forward all requests to (usually the identifier/dispatcher)
-  * `httpscertfile`: the certificate file path for HTTPS, relative to the `cert/` folder (OPTIONAL only if DISABLE_HTTPS is set to true)
-  * `httpskeyfile`: the key file path for HTTPS, relative to the `cert/` folder (OPTIONAL only if DISABLE_HTTPS is set to true)
 * `peer`: all information about the other peer in this tunnel (only *one* other peer)
   * `identity`: the identity of that peer and its public key
   * `keyfile`: the file storing that peer's public key (same relative path starting from `keys/`)
@@ -67,14 +62,12 @@ A sample configuration looks like this:
     "identity":      "producer@redpencil.io",
     "keyfile":       "producer-priv.asc",
     "passphrase":    "access",
-    "stackentry":    "http://servicea/",
-    "httpscertfile": "cert.pem",
-    "httpskeyfile":  "key.pem"
+    "stackentry":    "http://servicea/"
   },
   "peer": {
     "identity": "consumer@redpencil.io",
     "keyfile":  "consumer-pub.asc",
-    "address":  "https://tunnelb/secure"
+    "address":  "https://identifier/tunnel/secure"
   }
 }
 ```
@@ -87,24 +80,6 @@ The following environment variables can be used:
 * `TUNNEL_LOG_OUTBOUND`: enables some logging about outgoing messages to this tunnel (default: false)
 * `DISABLE_HTTPS`: set to true if you do not want HTTPS being used, but HTTP (default: false)
 * `PGP_COMPRESSION_LEVEL`: set the compression level for the PGP encryption (0 - 9, default: 9)
-
-The following environment variable is a bit hacky:
-
-* `NODE_TLS_REJECT_UNAUTHORIZED`: set to `'0'` if you don't want self signed HTTPS certificates being rejected. This is purely Node.js related. Keep in mind you should not use self signed certificates in production!
-
-## HTTPS
-
-It is strongly advised to run the tunnel's communication over HTTPS. Without HTTPS, messages can easily be intercepted and replayed at a later date, due to PGPs one-pass nature. To enable HTTPS, the following steps could be taken.
-
-To create a self-singed HTTPS certificate and keyfile, execute the following commands on a shell and move the `key.pem` and `cert.pem` files into the `cert` folder and include their names in the config file. It is strongly discouraged to use self signed certificates in production! Create and register certificate and key files with a Certificate Authority instead.
-
-```
-openssl genrsa -out key.pem
-openssl req -new -key key.pem -out csr.pem
-openssl x509 -req -days 9999 -in csr.pem -signkey key.pem -out cert.pem
-rm csr.pem
-```
-(Source: [How to create an https server?](https://nodejs.org/en/knowledge/HTTP/servers/how-to-create-a-HTTPS-server/))
 
 **The rest of this file is taken from the original mu-tunnel.**
 
