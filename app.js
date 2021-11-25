@@ -78,7 +78,6 @@ app.post('/secure', async (req, res) => {
 
   // Connect the verified signature to a known peer, only one in this case
   const peer = config.peer;
-  //const peer = config.peers.find(peer => signatures[0].keyID.equals(peer.key.getKeyID()));
 
   // Parse the decrypted message
   let payload;
