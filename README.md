@@ -1,4 +1,4 @@
-# Mu-tunnel
+# mu-tunnel
 
 Service which allows tunneling of HTTP(S) requests between semantic.works stacks securely using the OpenPGP standard.
 
@@ -21,7 +21,7 @@ This mu-tunnel (as forked from the original mu-tunnel) is more specified for mu.
 *	The tunnel is symmetric: there can be communication in both directions
 *	There are only 2 endpoints on this tunnel  
 	For communicating to multiple stacks, use multiple tunnels
-*	No more encapsulation of requests, this tunnel acts more like a HTTP-proxy for the identifier/dispatcher than a forwarder of messages
+*	No more encapsulation of requests, this tunnel acts more like a HTTP-proxy than a forwarder of messages
 
 ## Config
 
@@ -48,11 +48,11 @@ A configuration file contains the following objects and properties:
   * `identity`: the identity of this node and the private key used by this node
   * `keyfile`: the path to the file storing this node's private key. This is a relative path starting from `keys/`. This key should be passphrase-protected.
   * `passphrase`: the passphrase to decrypt this node's private key
-  * `stackentry`: the root URL to the service that the tunnel will forward all requests to (usually the identifier/dispatcher)
+  * `stackentry`: the root URL to the service that the tunnel will forward all requests to (possibly the identifier/dispatcher)
 * `peer`: all information about the other peer in this tunnel (only *one* other peer)
   * `identity`: the identity of that peer and its public key
   * `keyfile`: the file storing that peer's public key (same relative path starting from `keys/`)
-  * `address`: the external endpoint where this peer can be reached to forward requests
+  * `address`: the external endpoint where this peer can be reached to forward requests (OPTIONAL, if left out, this tunnel is unidirectional and this current endpoint can only be used for receiving (and responding to) requests)
 
 A sample configuration looks like this:
 

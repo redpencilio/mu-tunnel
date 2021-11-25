@@ -160,6 +160,11 @@ app.all('/*', async (req, res) => {
   }
 
   const peer = config.peer;
+  if(!peer.address) {
+    console.error(`No address for peer ${peer.identity}.`);
+    res.status(400).send("No peer address. Does not know how to reach the other tunnel endpoint. Check the tunnel config.json.");
+    return;
+  }
 
   //"Boolean" (truthy, falsy) for if the body is empty
   const emptyBody = (Object.keys(req.body).length === 0);
@@ -334,8 +339,7 @@ async function checkConfig() {
                           || !config.self.stackentry);
   const peerConfigMissing = (!config.peer
                           || !config.peer.identity
-                          || !config.peer.keyfile
-                          || !config.peer.address);
+                          || !config.peer.keyfile);
   if (selfConfigMissing || peerConfigMissing) {
     throw new Error("Config incomplete");
   }
